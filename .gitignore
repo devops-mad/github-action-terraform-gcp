@@ -1,0 +1,25 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude sensitive tfvars files (never commit secrets to GitHub)
+*.tfvars
+!backend.tfvars
+
+# Exclude temporary plan files
+*.tfplan
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore local error and scratch logs
+error.md
+*.log

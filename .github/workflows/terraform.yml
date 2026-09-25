@@ -1,0 +1,102 @@
+name: "Terraform CI/CD Pipeline (Keyless OIDC)"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform Action to perform'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  id-token: write      # Required for Google Cloud Workload Identity Federation (OIDC)
+  pull-requests: write # Required for commenting Terraform plan on Pull Requests
+
+jobs:
+  terraform:
+    name: "Terraform Plan & Apply"
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+      TF_VAR_region: ${{ secrets.GCP_REGION || 'us-east1' }}
+
+    steps:
+      # Step 1: Checkout the code from GitHub repository
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      # Step 2: Authenticate to Google Cloud using Keyless Workload Identity Federation (OIDC)
+      - name: "Authenticate to Google Cloud via Workload Identity Federation"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # Step 3: Install Terraform CLI
+      - name: "Setup Terraform CLI"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      # Step 4: Verify Terraform Formatting
+      - name: "Terraform Format Check"
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+
+      # Step 5: Initialize Terraform with Remote GCS State
+      - name: "Terraform Init"
+        id: init
+        run: |
+          terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}"
+
+      # Step 6: Validate Terraform Code Syntax
+      - name: "Terraform Validate"
+        id: validate
+        run: terraform validate -no-color
+
+      # Step 7: Terraform Plan (Runs on Pull Requests or Manual 'plan' Trigger)
+      - name: "Terraform Plan"
+        id: plan
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.action == 'plan')
+        run: |
+          terraform plan -no-color -out=tfplan
+        continue-on-error: false
+
+      # Step 8: Post Plan Summary to Pull Request Discussion
+      - name: "Comment Plan on PR"
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      # Step 9: Terraform Apply (Runs on Merge/Push to 'main' or Manual 'apply' Trigger)
+      - name: "Terraform Apply"
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
+        run: |
+          terraform apply -auto-approve
