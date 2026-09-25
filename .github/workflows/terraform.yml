@@ -29,7 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+<<<<<<< HEAD
       TF_VAR_region: ${{ secrets.GCP_REGION || 'us-west1' }}
+=======
+      TF_VAR_region: ${{ secrets.GCP_REGION || 'us-east1' }}
+>>>>>>> 7f128582ca9f180491ab0a1c5918ac5a705c5b77
 
     steps:
       # Step 1: Checkout the code from GitHub repository
