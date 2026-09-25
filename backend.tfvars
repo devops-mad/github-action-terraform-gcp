@@ -1,4 +1,4 @@
-# Backend configuration variables for dynamic `terraform init`
+# Backend configuration variables for dynamic `terraform init` 
 # Usage: terraform init -backend-config=backend.tfvars
 <<<<<<< HEAD
 
